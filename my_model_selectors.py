@@ -101,9 +101,47 @@ class SelectorCV(ModelSelector):
     ''' select best model based on average log Likelihood of cross-validation folds
 
     '''
+    def calc_best_score_cv(self, score_cv):
+        # Max of list of lists comparing each item by value at index 0
+        return max(score_cv, key = lambda x: x[0])
+
 
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
+        # logging.debug("Sequences: %r" % self.sequences)
 
-        # TODO implement model selection using CV
-        raise NotImplementedError
+        # num_splits = min(3, len(self.sequences))
+        kf = KFold(n_splits = 3, shuffle = False, random_state = None)
+        log_likelihoods = []
+        score_cvs = []
+
+        for num_states in range(self.min_n_components, self.max_n_components + 1):
+            try:
+                # Check sufficient data to split using KFold
+                if len(self.sequences) > 2:
+                    # CV loop of breaking-down the sequence (training set) into "folds" where a fold
+                    # rotated out of the training set is tested by scoring for Cross-Validation (CV)
+                    for train_index, test_index in kf.split(self.sequences):
+                        # print("TRAIN indices:", train_index, "TEST indices:", test_index)
+
+                        # Training sequences split using KFold are recombined
+                        self.X, self.lengths = combine_sequences(train_index, self.sequences)
+
+                        # Test sequences split using KFold are recombined
+                        X_test, lengths_test = combine_sequences(test_index, self.sequences)
+
+                        hmm_model = self.base_model(num_states)
+                        log_likelihood = hmm_model.score(X_test, lengths_test)
+                else:
+                    hmm_model = self.base_model(num_states)
+                    log_likelihood = hmm_model.score(self.X, self.lengths)
+
+                log_likelihoods.append(log_likelihood)
+
+                # Find average Log Likelihood of CV fold
+                score_cvs_avg = np.mean(log_likelihoods)
+                score_cvs.append(tuple([score_cvs_avg, hmm_model]))
+
+            except Exception as e:
+                pass
+        return self.calc_best_score_cv(score_cvs)[1] if score_cvs else None
