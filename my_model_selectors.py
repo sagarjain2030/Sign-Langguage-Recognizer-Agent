@@ -74,10 +74,35 @@ class SelectorBIC(ModelSelector):
 
         :return: GaussianHMM object
         """
+    def calc_num_free_params(self, num_states, num_data_points):
+        return ( num_states ** 2 ) + ( 2 * num_states * num_data_points ) - 1
+
+    def calc_score_bic(self, log_likelihood, num_free_params, num_data_points):
+        return (-2 * log_likelihood) + (num_free_params * np.log(num_data_points))
+
+    def calc_best_score_bic(self, score_bics):
+        # Min of list of lists comparing each item by value at index 0
+        return min(score_bics, key = lambda x: x[0])
+
+    def select(self):
+        """ Select best model for self.this_word based on BIC score
+        for n between self.min_n_components and self.max_n_components
+        :return: GaussianHMM object
+        """
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        score_bics = []
+        for num_states in range(self.min_n_components, self.max_n_components + 1):
+            try:
+                hmm_model = self.base_model(num_states)
+                log_likelihood = hmm_model.score(self.X, self.lengths)
+                num_data_points = sum(self.lengths)
+                num_free_params = self.calc_num_free_params(num_states, num_data_points)
+                score_bic = self.calc_score_bic(log_likelihood, num_free_params, num_data_points)
+                score_bics.append(tuple([score_bic, hmm_model]))
+            except:
+                pass
+        return self.calc_best_score_bic(score_bics)[1] if score_bics else None
 
 
 class SelectorDIC(ModelSelector):
