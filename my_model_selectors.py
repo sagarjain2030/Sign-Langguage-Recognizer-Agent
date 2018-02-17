@@ -115,12 +115,39 @@ class SelectorDIC(ModelSelector):
     DIC = log(P(X(i)) - 1/(M-1)SUM(log(P(X(all but i))
     '''
 
+    # Calculate anti log likelihoods.
+    def calc_log_likelihood_other_words(self, model, other_words):
+        return [model[1].score(word[0], word[1]) for word in other_words]
+
+    def calc_best_score_dic(self, score_dics):
+        # Max of list of lists comparing each item by value at index 0
+        return max(score_dics, key = lambda x: x[0])
+
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        other_words = []
+        models = []
+        score_dics = []
+        for word in self.words:
+            if word != self.this_word:
+                other_words.append(self.hwords[word])
+        try:
+            for num_states in range(self.min_n_components, self.max_n_components + 1):
+                hmm_model = self.base_model(num_states)
+                log_likelihood_original_word = hmm_model.score(self.X, self.lengths)
+                models.append((log_likelihood_original_word, hmm_model))
 
+        # Note: Situation that may cause exception may be if have more parameters to fit
+        # than there are samples, so must catch exception when the model is invalid
+        except Exception as e:
+            # logging.exception('DIC Exception occurred: ', e)
+            pass
+        for index, model in enumerate(models):
+            log_likelihood_original_word, hmm_model = model
+            score_dic = log_likelihood_original_word - np.mean(self.calc_log_likelihood_other_words(model, other_words))
+            score_dics.append(tuple([score_dic, model[1]]))
+        return self.calc_best_score_dic(score_dics)[1] if score_dics else None
 
 class SelectorCV(ModelSelector):
     ''' select best model based on average log Likelihood of cross-validation folds
